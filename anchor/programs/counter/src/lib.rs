@@ -1,70 +1,111 @@
 #![allow(clippy::result_large_err)]
 
 use anchor_lang::prelude::*;
-
-declare_id!("AeVMyTjk6yx9S3rwfeKmpgJeDWGf6c8VMrvSzyv6QN6F");
+    
+declare_id!("7AGmMcgd1SjoMsCcXAAYwRgB9ihCyM8cZqjsUqriNRQt");
 
 #[program]
-pub mod counter {
+pub mod journal {
     use super::*;
 
-  pub fn close(_ctx: Context<CloseCounter>) -> Result<()> {
-    Ok(())
-  }
+    pub fn create_journal_entry(ctx: Context<CreateEntry>, title: String, message: String) -> Result<()> {
+        msg!("Journal entry created");
+        msg!("Title: {}", title);
+        msg!("Message: {}", message);
 
-  pub fn decrement(ctx: Context<Update>) -> Result<()> {
-    ctx.accounts.counter.count = ctx.accounts.counter.count.checked_sub(1).unwrap();
-    Ok(())
-  }
+        let journal_entry = &mut ctx.accounts.journal_entry;
+        journal_entry.owner = ctx.accounts.owner.key();
+        journal_entry.title = title;
+        journal_entry.message = message;
+        Ok(())
+    }
 
-  pub fn increment(ctx: Context<Update>) -> Result<()> {
-    ctx.accounts.counter.count = ctx.accounts.counter.count.checked_add(1).unwrap();
-    Ok(())
-  }
+    pub fn update_journal_entry(
+        ctx: Context<UpdateEntry>,
+        title: String,
+        message: String,
+    ) -> Result<()> {
+        msg!("Journal Entry Updated");
+        msg!("Title: {}", title);
+        msg!("Message: {}", message);
+ 
+        let journal_entry = &mut ctx.accounts.journal_entry;
+        journal_entry.message = message;
+ 
+        Ok(())
+    }
 
-  pub fn initialize(_ctx: Context<InitializeCounter>) -> Result<()> {
-    Ok(())
-  }
-
-  pub fn set(ctx: Context<Update>, value: u8) -> Result<()> {
-    ctx.accounts.counter.count = value.clone();
-    Ok(())
-  }
-}
-
-#[derive(Accounts)]
-pub struct InitializeCounter<'info> {
-  #[account(mut)]
-  pub payer: Signer<'info>,
-
-  #[account(
-  init,
-  space = 8 + Counter::INIT_SPACE,
-  payer = payer
-  )]
-  pub counter: Account<'info, Counter>,
-  pub system_program: Program<'info, System>,
-}
-#[derive(Accounts)]
-pub struct CloseCounter<'info> {
-  #[account(mut)]
-  pub payer: Signer<'info>,
-
-  #[account(
-  mut,
-  close = payer, // close account and return lamports to payer
-  )]
-  pub counter: Account<'info, Counter>,
-}
-
-#[derive(Accounts)]
-pub struct Update<'info> {
-  #[account(mut)]
-  pub counter: Account<'info, Counter>,
-}
+    pub fn delete_journal_entry(_ctx: Context<DeleteEntry>, title: String) -> Result<()> {
+        msg!("Journal entry titled {} deleted", title);
+        Ok(())
+    }
+}   
 
 #[account]
 #[derive(InitSpace)]
-pub struct Counter {
-  count: u8,
+pub struct JournalEntryState {
+    pub owner: Pubkey,
+    #[max_len(50)]
+    pub title: String,
+    #[max_len(500)]
+    pub message: String,
 }
+
+//  the Context<CreateEntry> is used to define which accounts are needed to handle the CreateEntry instruction, and the JournalEntryStat account stores the actual on-chain data.
+// This struct holds the accounts involved in the instruction.
+#[derive(Accounts)]
+#[instruction(title: String, message: String)]
+pub struct CreateEntry<'info> { // think of this as an instruction (like peform this) or a task
+    #[account(
+        init,
+        seeds = [title.as_bytes(), owner.key().as_ref()],
+        bump,
+        payer = owner,
+        space = 8 + JournalEntryState::INIT_SPACE,
+    )]    
+    pub journal_entry: Account<'info, JournalEntryState>,
+    
+    // user who is creating the entry 
+    #[account(mut)]
+    pub owner: Signer<'info>,
+
+    // SystemProgram is required for creating accounts and allocating space on the Solana blockchain.
+    pub system_program: Program<'info, System>,
+}
+
+
+// The seeds and bump constraints are still needed to be able to find the specific PDA we want to update.
+#[derive(Accounts)]
+#[instruction(title: String, message: String)]
+pub struct UpdateEntry<'info> {
+    #[account(
+        mut,
+        seeds = [title.as_bytes(), owner.key().as_ref()],
+        bump,
+        // the realloc below very confusing...
+        realloc = 8 + 32 + 1 + 4 + title.len() + 4 + message.len(),
+        realloc::payer = owner,
+        realloc::zero = true,
+    )]
+    pub journal_entry: Account<'info, JournalEntryState>,
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(title: String)]
+pub struct DeleteEntry<'info> {
+    #[account(
+        mut,
+        seeds = [title.as_bytes(), owner.key().as_ref()],
+        bump,
+        close = owner,
+    )]
+    pub journal_entry: Account<'info, JournalEntryState>,
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+//  pub journal_entry: Account<'info, JournalEntryState> <= this account pe bumps and seeds se DPA calculate karke DPA can be located
