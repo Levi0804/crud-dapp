@@ -55,7 +55,7 @@ pub struct JournalEntryState {
 // This struct holds the accounts involved in the instruction.
 #[derive(Accounts)]
 #[instruction(title: String, message: String)]
-pub struct CreateEntry<'info> { // think of this as an instruction (like peform this) or a task
+pub struct CreateEntry<'info> { 
     #[account(
         init,
         seeds = [title.as_bytes(), owner.key().as_ref()],
@@ -82,7 +82,6 @@ pub struct UpdateEntry<'info> {
         mut,
         seeds = [title.as_bytes(), owner.key().as_ref()],
         bump,
-        // the realloc below very confusing...
         realloc = 8 + 32 + 1 + 4 + title.len() + 4 + message.len(),
         realloc::payer = owner,
         realloc::zero = true,
@@ -107,5 +106,3 @@ pub struct DeleteEntry<'info> {
     pub owner: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
-
-//  pub journal_entry: Account<'info, JournalEntryState> <= this account pe bumps and seeds se DPA calculate karke DPA can be located
